@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Chat</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .chat-container {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      width: 400px;
+      height: 600px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      background: #4a5568;
+      color: white;
+      padding: 20px;
+      text-align: center;
+      font-size: 1.2em;
+      font-weight: bold;
+    }
+
+    .status {
+      font-size: 0.65em;
+      font-weight: normal;
+      opacity: 0.85;
+      margin-top: 4px;
+    }
+
+    .status.offline {
+      color: #ffd6d6;
+    }
+
+    #messages {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message {
+      margin-bottom: 15px;
+      padding: 10px 15px;
+      background: #e3f2fd;
+      border-radius: 18px;
+      max-width: 80%;
+      word-wrap: break-word;
+      animation: slideIn 0.3s ease-out;
+      align-self: flex-start;
+    }
+
+    .message.own {
+      background: #667eea;
+      color: white;
+      align-self: flex-end;
+    }
+
+    .message.notification {
+      background: #fff3cd;
+      color: #856404;
+      font-style: italic;
+      max-width: 100%;
+      align-self: center;
+      text-align: center;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .input-container {
+      display: flex;
+      padding: 20px;
+      background: white;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    #messageInput {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 25px;
+      outline: none;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    #messageInput:focus {
+      border-color: #667eea;
+    }
+
+    #sendButton {
+      margin-left: 10px;
+      padding: 12px 20px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+
+    #sendButton:hover {
+      background: #5a6fd8;
+    }
+
+    .typing-indicator {
+      font-style: italic;
+      color: #666;
+      padding: 5px 15px;
+      font-size: 0.9em;
+      min-height: 1.6em;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="chat-container">
+    <div class="chat-header">
+      💬 Real-Time Chat
+      <div id="status" class="status offline">connecting...</div>
+    </div>
+    <div id="messages"></div>
+    <div id="typingIndicator" class="typing-indicator"></div>
+    <div class="input-container">
+      <input id="messageInput" type="text" placeholder="Type your message..." autocomplete="off">
+      <button id="sendButton">Send</button>
+    </div>
+  </div>
+  <script>
+    const messages = document.getElementById('messages');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const status = document.getElementById('status');
+
+    let ws;
+    let myId = null;
+    let reconnectDelay = 500;
+
+    // ------------------------------------------------------------- conexão
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      ws.addEventListener('open', () => {
+        reconnectDelay = 500;
+        status.textContent = 'online';
+        status.className = 'status';
+      });
+
+      ws.addEventListener('message', (event) => {
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        handle(payload);
+      });
+
+      ws.addEventListener('close', () => {
+        status.textContent = 'reconnecting...';
+        status.className = 'status offline';
+        typingSent = false;
+        clearAllTyping();
+        setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+      });
+
+      ws.addEventListener('error', () => ws.close());
+    }
+
+    function send(payload) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload));
+      }
+    }
+
+    // ------------------------------------------------------------ recepção
+    function handle(payload) {
+      switch (payload.type) {
+        case 'welcome':
+          myId = payload.id;
+          break;
+        case 'message':
+          addMessage(payload.text, payload.from === myId);
+          break;
+        case 'notification':
+          addNotification(payload.text);
+          break;
+        case 'typing':
+          updateTyping(payload.from, payload.isTyping);
+          break;
+      }
+    }
+
+    function addMessage(text, own) {
+      const element = document.createElement('div');
+      element.classList.add('message');
+      if (own) element.classList.add('own');
+      element.textContent = text;
+      messages.appendChild(element);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addNotification(text) {
+      const element = document.createElement('div');
+      element.classList.add('message', 'notification');
+      element.textContent = text;
+      messages.appendChild(element);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    // ---------------------------------------- indicador de "está digitando"
+    const typingUsers = new Map();
+
+    function updateTyping(from, isTyping) {
+      clearTimeout(typingUsers.get(from));
+
+      if (isTyping) {
+        typingUsers.set(from, setTimeout(() => {
+          typingUsers.delete(from);
+          renderTyping();
+        }, 5000));
+      } else {
+        typingUsers.delete(from);
+      }
+
+      renderTyping();
+    }
+
+    function clearAllTyping() {
+      for (const timer of typingUsers.values()) clearTimeout(timer);
+      typingUsers.clear();
+      renderTyping();
+    }
+
+    function renderTyping() {
+      const total = typingUsers.size;
+      typingIndicator.textContent =
+        total === 0 ? '' :
+        total === 1 ? 'Someone is typing...' :
+        `${total} people are typing...`;
+    }
+
+    // ---------------------------------------------------------------- envio
+    let typingSent = false;
+    let typingTimer;
+
+    function sendMessage() {
+      const text = messageInput.value.trim();
+      if (!text) return;
+
+      send({ type: 'message', text });
+      messageInput.value = '';
+      stopTyping();
+    }
+
+    function startTyping() {
+      if (!typingSent) {
+        send({ type: 'typing', isTyping: true });
+        typingSent = true;
+      }
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(stopTyping, 1500);
+    }
+
+    function stopTyping() {
+      clearTimeout(typingTimer);
+      if (!typingSent) return;
+      typingSent = false;
+      send({ type: 'typing', isTyping: false });
+    }
+
+    sendButton.addEventListener('click', sendMessage);
+
+    messageInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+
+    messageInput.addEventListener('input', () => {
+      if (messageInput.value) startTyping();
+      else stopTyping();
+    });
+
+    window.addEventListener('beforeunload', stopTyping);
+
+    connect();
+    messageInput.focus();
+  </script>
+</body>
+
+</html>
