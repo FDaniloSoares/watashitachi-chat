@@ -31,3 +31,6 @@ Thumbs.db
 
 # Drizzle
 .drizzle/
+
+# hexagonal-lab (repositório em arquivo)
+hexagonal-lab/.data/

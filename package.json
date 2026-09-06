@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch server.ts"
+    "dev": "tsx watch server.ts",
+    "lab:cli": "tsx hexagonal-lab/main/cli-main.ts",
+    "lab:http": "tsx hexagonal-lab/main/http-main.ts",
+    "lab:test": "tsx --test hexagonal-lab/tests/*.test.ts"
   },
   "keywords": [],
   "author": "",
