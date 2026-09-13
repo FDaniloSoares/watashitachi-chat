@@ -166,3 +166,5 @@ TASKS_STORAGE=file pnpm lab:http     # mesma API, agora gravando em disco
 - **Achar que é sempre necessário.** Um CRUD de 200 linhas não precisa disso. O custo
   (indireção, mais arquivos) só se paga quando as regras têm vida própria ou a
   infraestrutura é volátil.
+
+  teste de continuidade
